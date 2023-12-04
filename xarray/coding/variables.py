@@ -144,6 +144,96 @@ class BoolTypeArray(indexing.ExplicitlyIndexedNDArrayMixin):
         return np.asarray(self.array[key], dtype=self.dtype)
 
 
+class MaskedArrayMixIn(indexing.ExplicitlyIndexedNDArrayMixin):
+    def __eq__(self, __o) -> np.ndarray:
+        return self[...] == __o
+
+    def __ne__(self, __o) -> np.ndarray:
+        return ~(self == __o)
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Shape of this array
+        Returns:
+            Tuple[int, ...]: A shape that looks like a 1-d shape i.e., (#, )
+        """
+        return self.values.shape
+
+
+class LazyCategoricalArray(MaskedArrayMixIn):
+    __slots__ = (
+        "values",
+        "attrs",
+        "_categories",
+        "_categories_cache",
+        "group",
+        "_drop_unused_cats",
+    )
+
+    def __init__(
+        self,
+        codes,
+        categories,
+        *args,
+        attrs={"ordered": False},
+        drop_unused_cats=False,
+        **kwargs,
+    ):
+        """Class for lazily reading categorical data from formatted zarr group.   Used as base for `LazilyIndexedArray`.
+        Args:
+            codes (Union[zarr.Array, h5py.Dataset]): values (integers) of the array, one for each element
+            categories (Union[zarr.Array, h5py.Dataset]): mappings from values to strings
+            attrs (Union[zarr.Array, h5py.Dataset]): attrs containing boolean "ordered"
+            _drop_unused_cats (bool): Whether or not to drop unused categories.
+        """
+        self.values = indexing.as_indexable(codes)
+        self._categories = categories
+        self._categories_cache = None
+        self.attrs = dict(attrs)
+        self._drop_unused_cats = drop_unused_cats
+
+    @property
+    def categories(self):  # __slots__ and cached_property are incompatible
+        if self._categories_cache is None:
+            self._categories_cache = self._categories[...]
+        return self._categories_cache
+
+    @property
+    def dtype(self) -> pd.CategoricalDtype:
+        return pd.CategoricalDtype(self.categories, self.ordered)
+
+    @property
+    def ordered(self):
+        return bool(self.attrs["ordered"])
+
+    def __getitem__(self, selection) -> pd.Categorical:
+        idx = selection
+        codes = self.values[idx]
+        if codes.shape == ():  # handle 0d case
+            codes = np.array([codes])
+        res = pd.Categorical.from_codes(  # TODO: replace with numpy
+            codes=codes,
+            categories=self.categories,
+            ordered=self.ordered,
+        )
+        if self._drop_unused_cats:
+            return res.remove_unused_categories()
+        return res
+
+    def __repr__(self) -> str:
+        return f"LazyCategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
+
+    def copy(self) -> LazyCategoricalArray:
+        """Returns a copy of this array which can then be safely edited
+        Returns:
+            LazyCategoricalArray: copied LazyCategoricalArray
+        """
+        arr = LazyCategoricalArray(
+            self.values, self._categories, self.attrs
+        )  # self.categories reads in data
+        return arr
+
+
 def lazy_elemwise_func(array, func: Callable, dtype: np.typing.DTypeLike):
     """Lazily apply an element-wise function to an array.
     Parameters
@@ -364,6 +454,33 @@ def _choose_float_dtype(dtype: np.dtype, has_offset: bool) -> type[np.floating[A
     # For all other types and circumstances, we just use float64.
     # (safe because eg. complex numbers are not supported in NetCDF)
     return np.float64
+
+
+class EnumCoder(VariableCoder):
+    """
+    Coder for enum types
+    """
+
+    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        """Convert an encoded variable to a decoded variable"""
+        dims, data, attrs, encoding = unpack_for_decoding(variable)
+        if isinstance(data.dtype, pd.CategoricalDtype):
+            encoding["enumtype"] = {
+                [cat]: ind for ind, cat in enumerate(data.categories)
+            }
+            return Variable(dims, data, attrs, encoding, fastpath=True)
+        return variable
+
+    def decode(self, variable: Variable, name: T_Name = None) -> Variable:
+        """Convert an decoded variable to a encoded variable"""
+        dims, data, attrs, encoding = unpack_for_decoding(variable)
+        if "enumtype" in encoding:
+            enumtype = encoding.pop("enumtype")
+            data = LazyCategoricalArray(
+                codes=data, categories=np.array(list(enumtype["enum_dict"].keys()))
+            )
+            return Variable(dims, data, attrs, encoding, fastpath=True)
+        return variable
 
 
 class CFScaleOffsetCoder(VariableCoder):

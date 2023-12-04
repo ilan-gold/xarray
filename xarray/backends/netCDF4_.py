@@ -419,6 +419,12 @@ class NetCDF4DataStore(WritableCFDataStore):
         if filters is not None:
             encoding.update(filters)
         chunking = var.chunking()
+        import netCDF4
+
+        if isinstance(var.datatype, netCDF4.EnumType):
+            encoding["enumtype"] = {}
+            encoding["enumtype"]["enum_dict"] = var.datatype.enum_dict
+            encoding["enumtype"]["name"] = var.datatype.name
         if chunking is not None:
             if chunking == "contiguous":
                 encoding["contiguous"] = True

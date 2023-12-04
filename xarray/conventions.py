@@ -184,6 +184,7 @@ def encode_cf_variable(
         variables.NonStringCoder(),
         variables.DefaultFillvalueCoder(),
         variables.BooleanCoder(),
+        variables.EnumCoder(),
     ]:
         var = coder.encode(var, name=name)
 
@@ -287,6 +288,7 @@ def decode_cf_variable(
         original_dtype = var.dtype
 
     var = variables.BooleanCoder().decode(var)
+    var = variables.EnumCoder().decode(var)
 
     dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
 

@@ -156,7 +156,7 @@ def _get_datatype(var, nc_format="NETCDF4", raise_on_invalid_encoding=False):
 
 
 def _nc4_dtype(var):
-    if "dtype" in var.encoding:
+    if "dtype" in var.encoding and "enumtype" not in var.encoding:
         dtype = var.encoding.pop("dtype")
         _check_encoding_dtype_is_vlen_string(dtype)
     elif coding.strings.is_unicode_dtype(var.dtype):

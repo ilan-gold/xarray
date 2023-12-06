@@ -199,26 +199,19 @@ class LazyCategoricalArray(MaskedArrayMixIn):
         return self._categories_cache
 
     @property
-    def dtype(self) -> pd.CategoricalDtype:
-        return pd.CategoricalDtype(self.categories, self.ordered)
+    def dtype(self) -> np.dtype:
+        return self.categories.dtype
 
     @property
     def ordered(self):
         return bool(self.attrs["ordered"])
 
-    def __getitem__(self, selection) -> pd.Categorical:
+    def __getitem__(self, selection) -> np.ndarray:
         idx = selection
         codes = self.values[idx]
         if codes.shape == ():  # handle 0d case
             codes = np.array([codes])
-        res = pd.Categorical.from_codes(  # TODO: replace with numpy
-            codes=codes,
-            categories=self.categories,
-            ordered=self.ordered,
-        )
-        if self._drop_unused_cats:
-            return res.remove_unused_categories()
-        return res
+        return self.categories.take(codes)
 
     def __repr__(self) -> str:
         return f"LazyCategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
@@ -464,10 +457,7 @@ class EnumCoder(VariableCoder):
     def encode(self, variable: Variable, name: T_Name = None) -> Variable:
         """Convert an encoded variable to a decoded variable"""
         dims, data, attrs, encoding = unpack_for_decoding(variable)
-        if isinstance(data.dtype, pd.CategoricalDtype):
-            encoding["enumtype"] = {
-                [cat]: ind for ind, cat in enumerate(data.categories)
-            }
+        if "enumtype" in encoding:
             return Variable(dims, data, attrs, encoding, fastpath=True)
         return variable
 
@@ -475,7 +465,7 @@ class EnumCoder(VariableCoder):
         """Convert an decoded variable to a encoded variable"""
         dims, data, attrs, encoding = unpack_for_decoding(variable)
         if "enumtype" in encoding:
-            enumtype = encoding.pop("enumtype")
+            enumtype = encoding["enumtype"]
             data = LazyCategoricalArray(
                 codes=data, categories=np.array(list(enumtype["enum_dict"].keys()))
             )
@@ -648,12 +638,17 @@ class EndianCoder(VariableCoder):
 
 
 class NonStringCoder(VariableCoder):
-    """Encode NonString variables if dtypes differ."""
+    """Encode NonString (not including categoricals) variables if dtypes differ."""
 
     def encode(self, variable: Variable, name: T_Name = None) -> Variable:
-        if "dtype" in variable.encoding and variable.encoding["dtype"] not in (
-            "S1",
-            str,
+        if (
+            "dtype" in variable.encoding
+            and variable.encoding["dtype"]
+            not in (
+                "S1",
+                str,
+            )
+            and "enumtype" not in variable.encoding
         ):
             dims, data, attrs, encoding = unpack_for_encoding(variable)
             dtype = np.dtype(encoding.pop("dtype"))

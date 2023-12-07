@@ -47,6 +47,18 @@ class TestNativeEndiannessArray:
         assert_array_equal(a, expected)
 
 
+class TestCategoricals:
+    def test(self) -> None:
+        x = np.array([0, 2, 2, 4, 0, 4, 0, 2], dtype=np.int32)
+        expected = np.array(
+            ["foo", "bar", "bar", "jazz", "foo", "jazz", "foo", "bar"], dtype="object"
+        )
+        a = coding.variables.CategoricalArray(
+            codes=x, categories={0: "foo", 2: "bar", 4: "jazz"}
+        )
+        assert_array_equal(a, expected)
+
+
 def test_decode_cf_with_conflicting_fill_missing_value() -> None:
     expected = Variable(["t"], [np.nan, np.nan, 2], {"units": "foobar"})
     var = Variable(

@@ -872,6 +872,16 @@ class CFEncodedBase(DatasetIOBase):
             else:
                 assert actual["a"].dtype == np.dtype("<U1")
 
+    def test_roundtrip_enum(self) -> None:
+        # checks preserving vlen dtype for empty arrays GH7862
+        x = np.array([0, 2, 2, 4, 0, 4, 0, 2], dtype=np.int32)
+        encoding = {
+            "enumtype": {"enum_dict": {"foo": 0, "bar": 2, "jazz": 4}, "name": "x"}
+        }
+        original = Dataset({"x": ("t", x, {}, encoding)})
+        with self.roundtrip(original) as actual:
+            assert_identical(original, actual)
+
     @pytest.mark.parametrize(
         "decoded_fn, encoded_fn",
         [

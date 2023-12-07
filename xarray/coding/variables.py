@@ -160,7 +160,7 @@ class MaskedArrayMixIn(indexing.ExplicitlyIndexedNDArrayMixin):
         return self.values.shape
 
 
-class LazyCategoricalArray(MaskedArrayMixIn):
+class CategoricalArray(MaskedArrayMixIn):
     __slots__ = (
         "values",
         "attrs",
@@ -208,14 +208,14 @@ class LazyCategoricalArray(MaskedArrayMixIn):
         return np.vectorize(self.categories.get)(codes)
 
     def __repr__(self) -> str:
-        return f"LazyCategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
+        return f"CategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
 
-    def copy(self) -> LazyCategoricalArray:
+    def copy(self) -> CategoricalArray:
         """Returns a copy of this array which can then be safely edited
         Returns:
-            LazyCategoricalArray: copied LazyCategoricalArray
+            CategoricalArray: copied CategoricalArray
         """
-        arr = LazyCategoricalArray(
+        arr = CategoricalArray(
             self.values, self._categories, self.attrs
         )  # self.categories reads in data
         return arr
@@ -460,7 +460,7 @@ class EnumCoder(VariableCoder):
         dims, data, attrs, encoding = unpack_for_decoding(variable)
         if "enumtype" in encoding:
             enumtype = encoding["enumtype"]
-            data = LazyCategoricalArray(
+            data = CategoricalArray(
                 codes=data,
                 categories={
                     v: k for k, v in enumtype["enum_dict"].items()

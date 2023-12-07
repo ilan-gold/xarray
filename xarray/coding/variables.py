@@ -164,7 +164,7 @@ class LazyCategoricalArray(MaskedArrayMixIn):
     __slots__ = (
         "values",
         "attrs",
-        "_categories",
+        "categories",
         "_categories_cache",
         "group",
         "_drop_unused_cats",
@@ -172,11 +172,11 @@ class LazyCategoricalArray(MaskedArrayMixIn):
 
     def __init__(
         self,
-        codes,
-        categories,
+        codes: Any,
+        categories: dict,
         *args,
-        attrs={"ordered": False},
-        drop_unused_cats=False,
+        ordered: bool = False,
+        drop_unused_cats: bool = False,
         **kwargs,
     ):
         """Class for lazily reading categorical data from formatted zarr group.   Used as base for `LazilyIndexedArray`.
@@ -187,31 +187,25 @@ class LazyCategoricalArray(MaskedArrayMixIn):
             _drop_unused_cats (bool): Whether or not to drop unused categories.
         """
         self.values = indexing.as_indexable(codes)
-        self._categories = categories
+        self.categories = categories
         self._categories_cache = None
-        self.attrs = dict(attrs)
+        self._ordered = ordered
         self._drop_unused_cats = drop_unused_cats
 
     @property
-    def categories(self):  # __slots__ and cached_property are incompatible
-        if self._categories_cache is None:
-            self._categories_cache = self._categories[...]
-        return self._categories_cache
-
-    @property
     def dtype(self) -> np.dtype:
-        return self.categories.dtype
+        return self.values.dtype
 
     @property
     def ordered(self):
-        return bool(self.attrs["ordered"])
+        return bool(self._ordered)
 
     def __getitem__(self, selection) -> np.ndarray:
         idx = selection
         codes = self.values[idx]
         if codes.shape == ():  # handle 0d case
             codes = np.array([codes])
-        return self.categories.take(codes)
+        return np.vectorize(self.categories.get)(codes)
 
     def __repr__(self) -> str:
         return f"LazyCategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
@@ -467,7 +461,10 @@ class EnumCoder(VariableCoder):
         if "enumtype" in encoding:
             enumtype = encoding["enumtype"]
             data = LazyCategoricalArray(
-                codes=data, categories=np.array(list(enumtype["enum_dict"].keys()))
+                codes=data,
+                categories={
+                    v: k for k, v in enumtype["enum_dict"].items()
+                },  # can invert the mapping somewhere else also
             )
             return Variable(dims, data, attrs, encoding, fastpath=True)
         return variable

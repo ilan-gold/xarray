@@ -144,23 +144,7 @@ class BoolTypeArray(indexing.ExplicitlyIndexedNDArrayMixin):
         return np.asarray(self.array[key], dtype=self.dtype)
 
 
-class MaskedArrayMixIn(indexing.ExplicitlyIndexedNDArrayMixin):
-    def __eq__(self, __o) -> np.ndarray:
-        return self[...] == __o
-
-    def __ne__(self, __o) -> np.ndarray:
-        return ~(self == __o)
-
-    @property
-    def shape(self) -> tuple[int, ...]:
-        """Shape of this array
-        Returns:
-            Tuple[int, ...]: A shape that looks like a 1-d shape i.e., (#, )
-        """
-        return self.values.shape
-
-
-class CategoricalArray(MaskedArrayMixIn):
+class CategoricalArray(indexing.ExplicitlyIndexedNDArrayMixin):
     __slots__ = (
         "values",
         "attrs",
@@ -168,6 +152,7 @@ class CategoricalArray(MaskedArrayMixIn):
         "_categories_cache",
         "group",
         "_drop_unused_cats",
+        "_ordered",
     )
 
     def __init__(
@@ -179,18 +164,27 @@ class CategoricalArray(MaskedArrayMixIn):
         drop_unused_cats: bool = False,
         **kwargs,
     ):
-        """Class for lazily reading categorical data from formatted zarr group.   Used as base for `LazilyIndexedArray`.
-        Args:
-            codes (Union[zarr.Array, h5py.Dataset]): values (integers) of the array, one for each element
-            categories (Union[zarr.Array, h5py.Dataset]): mappings from values to strings
-            attrs (Union[zarr.Array, h5py.Dataset]): attrs containing boolean "ordered"
-            _drop_unused_cats (bool): Whether or not to drop unused categories.
-        """
         self.values = indexing.as_indexable(codes)
         self.categories = categories
         self._categories_cache = None
         self._ordered = ordered
         self._drop_unused_cats = drop_unused_cats
+
+    def __eq__(self, __o) -> np.ndarray:
+        inverted_categories = {v: k for k, v in self.categories.items()}
+        # is this better than reading in the strings from self?
+        return self.values[...] == np.vectorize(inverted_categories.get)(__o)
+
+    def __ne__(self, __o) -> np.ndarray:
+        return ~(self == __o)
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Shape of this array
+        Returns:
+            Tuple[int, ...]: A shape that looks like a 1-d shape i.e., (#, )
+        """
+        return self.values.shape
 
     @property
     def dtype(self) -> np.dtype:

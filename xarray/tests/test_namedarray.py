@@ -10,9 +10,13 @@ import numpy as np
 import pytest
 
 from xarray.core.indexing import ExplicitlyIndexed
-from xarray.namedarray._typing import _arrayfunction_or_api, _DType_co, _ShapeType_co
+from xarray.namedarray._typing import (
+    _arrayfunction_or_api,
+    _default,
+    _DType_co,
+    _ShapeType_co,
+)
 from xarray.namedarray.core import NamedArray, from_array
-from xarray.namedarray.utils import _default
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -20,13 +24,14 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, DTypeLike, NDArray
 
     from xarray.namedarray._typing import (
+        Default,
         _AttrsLike,
         _DimsLike,
         _DType,
+        _IndexKeyLike,
         _Shape,
         duckarray,
     )
-    from xarray.namedarray.utils import Default
 
 
 class CustomArrayBase(Generic[_ShapeType_co, _DType_co]):
@@ -54,6 +59,19 @@ class CustomArrayIndexable(
     ExplicitlyIndexed,
     Generic[_ShapeType_co, _DType_co],
 ):
+    def __getitem__(
+        self, key: _IndexKeyLike | CustomArrayIndexable[Any, Any], /
+    ) -> CustomArrayIndexable[Any, _DType_co]:
+        if isinstance(key, CustomArrayIndexable):
+            if isinstance(key.array, type(self.array)):
+                # TODO: key.array is duckarray here, can it be narrowed down further?
+                # an _arrayapi cannot be used on a _arrayfunction for example.
+                return type(self)(array=self.array[key.array])  # type: ignore[index]
+            else:
+                raise TypeError("key must have the same array type as self")
+        else:
+            return type(self)(array=self.array[key])
+
     def __array_namespace__(self) -> ModuleType:
         return np
 
@@ -475,3 +493,7 @@ class TestNamedArray(NamedArraySubclassobjects):
         var_float2: Variable[Any, np.dtype[np.float32]]
         var_float2 = var_float._replace(("x",), np_val2)
         assert var_float2.dtype == dtype_float
+
+    def test_warn_on_repeated_dimension_names(self) -> None:
+        with pytest.warns(UserWarning, match="Duplicate dimension names"):
+            NamedArray(("x", "x"), np.arange(4).reshape(2, 2))

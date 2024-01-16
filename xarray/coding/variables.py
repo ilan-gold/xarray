@@ -148,7 +148,7 @@ class CategoricalArray(indexing.ExplicitlyIndexedNDArrayMixin):
     __slots__ = (
         "values",
         "attrs",
-        "categories",
+        "_categories",
         "_categories_cache",
         "group",
         "_drop_unused_cats",
@@ -165,13 +165,13 @@ class CategoricalArray(indexing.ExplicitlyIndexedNDArrayMixin):
         **kwargs,
     ):
         self.values = indexing.as_indexable(codes)
-        self.categories = categories
+        self._categories = categories
         self._categories_cache = None
         self._ordered = ordered
         self._drop_unused_cats = drop_unused_cats
 
     def __eq__(self, __o) -> np.ndarray:
-        inverted_categories = {v: k for k, v in self.categories.items()}
+        inverted_categories = {v: k for k, v in self._categories.items()}
         # is this better than reading in the strings from self?
         return self.values[...] == np.vectorize(inverted_categories.get)(__o)
 
@@ -199,10 +199,10 @@ class CategoricalArray(indexing.ExplicitlyIndexedNDArrayMixin):
         codes = self.values[idx]
         if codes.shape == ():  # handle 0d case
             codes = np.array([codes])
-        return np.vectorize(self.categories.get)(codes)
+        return np.vectorize(self._categories.get)(codes)
 
     def __repr__(self) -> str:
-        return f"CategoricalArray(codes=..., categories={self.categories}, ordered={self.ordered})"
+        return f"CategoricalArray(codes=..., categories={self._categories}, ordered={self.ordered})"
 
     def copy(self) -> CategoricalArray:
         """Returns a copy of this array which can then be safely edited
@@ -211,7 +211,7 @@ class CategoricalArray(indexing.ExplicitlyIndexedNDArrayMixin):
         """
         arr = CategoricalArray(
             self.values, self._categories, self.attrs
-        )  # self.categories reads in data
+        )  # self._categories reads in data
         return arr
 
 

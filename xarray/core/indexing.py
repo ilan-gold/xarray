@@ -444,7 +444,7 @@ class OuterIndexer(ExplicitIndexer):
                         f"invalid indexer array for {type(self).__name__}; must be scalar "
                         f"or have 1 dimension: {k!r}"
                     )
-                k = k.astype(np.int64)  # type: ignore[union-attr]
+                k = duck_array_ops.astype(k, np.int64, copy=False)
             else:
                 raise TypeError(
                     f"unexpected indexer type for {type(self).__name__}: {k!r}"
@@ -488,7 +488,7 @@ class VectorizedIndexer(ExplicitIndexer):
                         "invalid indexer key: ndarray arguments "
                         f"have different numbers of dimensions: {ndims}"
                     )
-                k = k.astype(np.int64)  # type: ignore[union-attr]
+                k = duck_array_ops.astype(k, np.int64, copy=False)
             else:
                 raise TypeError(
                     f"unexpected indexer type for {type(self).__name__}: {k!r}"
@@ -1805,7 +1805,8 @@ class PandasIndexingAdapter(ExplicitlyIndexedNDArrayMixin):
         # duck array protocols.
         # `NumpyExtensionArray` is excluded
         if pd.api.types.is_extension_array_dtype(self.array) and not isinstance(
-            self.array.array, pd.arrays.NumpyExtensionArray
+            self.array.array,
+            pd.arrays.NumpyExtensionArray,  # type: ignore[attr-defined]
         ):
             from xarray.core.extension_array import PandasExtensionArray
 

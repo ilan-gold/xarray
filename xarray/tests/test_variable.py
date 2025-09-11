@@ -15,6 +15,7 @@ import pytz
 from xarray import DataArray, Dataset, IndexVariable, Variable, set_options
 from xarray.core import dtypes, duck_array_ops, indexing
 from xarray.core.common import full_like, ones_like, zeros_like
+from xarray.core.extension_array import PandasExtensionArray
 from xarray.core.indexing import (
     BasicIndexer,
     CopyOnWriteArray,
@@ -2757,15 +2758,15 @@ class TestAsCompatibleData(Generic[T_DuckArray]):
             warnings.simplefilter("ignore")
             actual: T_DuckArray = as_compatible_data(times_s)
         assert actual.array == times_s
-        assert actual.array.dtype == pd.DatetimeTZDtype("s", tz)  # type: ignore[arg-type]
+        assert actual.array.dtype == times_s.dtype  # type: ignore[arg-type]
 
         series = pd.Series(times_s)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             actual2: T_DuckArray = as_compatible_data(series)
 
-        np.testing.assert_array_equal(actual2, np.asarray(series.values))
-        assert actual2.dtype == np.dtype("datetime64[s]")
+        np.testing.assert_array_equal(actual2, np.asarray(series.array))
+        assert actual2.dtype == times_s.dtype
 
     def test_full_like(self) -> None:
         # For more thorough tests, see test_variable.py
@@ -3096,8 +3097,13 @@ def test_datetime_conversion(values, unit) -> None:
     else:
         # The only case where a non-datetime64 dtype can occur currently is in
         # the case that the variable is backed by a timezone-aware
-        # DatetimeIndex, and thus is hidden within the PandasIndexingAdapter class.
-        assert isinstance(var._data, PandasIndexingAdapter)
+        # DatetimeIndex/DateTimeArray, and thus is hidden within the PandasIndexingAdapter/PandasExtensionArray class.
+        assert isinstance(
+            var._data,
+            PandasIndexingAdapter
+            if isinstance(values, pd.DatetimeIndex)
+            else PandasExtensionArray,
+        )
         assert var._data.array.dtype == pd.DatetimeTZDtype(
             "ns", pytz.timezone("America/New_York")
         )
@@ -3132,19 +3138,9 @@ def test_pandas_two_only_datetime_conversion_warnings(
 ) -> None:
     # todo: check for redundancy (suggested per review)
     var = Variable(["time"], data.astype(dtype))  # type: ignore[arg-type]
-
-    # we internally convert series to numpy representations to avoid too much nastiness with extension arrays
-    # when calling data.array e.g., with NumpyExtensionArrays
-    if isinstance(data, pd.Series):
-        assert var.dtype == np.dtype("datetime64[s]")
-    elif var.dtype.kind == "M":
-        assert var.dtype == dtype
-    else:
-        # The only case where a non-datetime64 dtype can occur currently is in
-        # the case that the variable is backed by a timezone-aware
-        # DatetimeIndex, and thus is hidden within the PandasIndexingAdapter class.
+    assert var.dtype == dtype
+    if isinstance(data, pd.DatetimeIndex):
         assert isinstance(var._data, PandasIndexingAdapter)
-        assert var._data.array.dtype == pd.DatetimeTZDtype("s", tz_ny)
 
 
 @pytest.mark.parametrize(

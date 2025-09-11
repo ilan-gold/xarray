@@ -63,11 +63,6 @@ NON_NUMPY_SUPPORTED_ARRAY_TYPES = (
 )
 # https://github.com/python/mypy/issues/224
 BASIC_INDEXING_TYPES = integer_types + (slice,)
-UNSUPPORTED_EXTENSION_ARRAY_TYPES = (
-    pd.arrays.DatetimeArray,
-    pd.arrays.TimedeltaArray,
-    pd.arrays.NumpyExtensionArray,  # type: ignore[attr-defined]
-)
 
 if TYPE_CHECKING:
     from xarray.core.types import (
@@ -195,7 +190,7 @@ def _maybe_wrap_data(data):
     """
     if isinstance(data, pd.Index):
         return PandasIndexingAdapter(data)
-    if isinstance(data, UNSUPPORTED_EXTENSION_ARRAY_TYPES):
+    if isinstance(data, pd.arrays.NumpyExtensionArray):
         return data.to_numpy()
     if isinstance(data, pd.api.extensions.ExtensionArray):
         return PandasExtensionArray(data)
@@ -261,7 +256,7 @@ def as_compatible_data(
         if (
             isinstance(data, pd.Series)
             and pd.api.types.is_extension_array_dtype(data)
-            and not isinstance(data.array, UNSUPPORTED_EXTENSION_ARRAY_TYPES)
+            and not isinstance(data.array, pd.arrays.NumpyExtensionArray)
         ):
             pandas_data = data.array
         else:
